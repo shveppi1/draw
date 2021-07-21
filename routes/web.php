@@ -16,7 +16,7 @@ Route::get('/', function () {
 });
 
 
-Route::any('/tePool/webhook/', 'MainCtrl@update');
+Route::any('/drawPool/webhook/', 'MainCtrl@update');
 Route::get('/getRespons', 'MainCtrl@respons');
 Route::get('/getState', 'MainCtrl@state');
 Route::get('/drawlist', 'MainCtrl@drawlist');
