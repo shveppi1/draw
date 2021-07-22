@@ -7,6 +7,7 @@ use App\Admin;
 use App\Canal;
 use App\Draw;
 use App\Participant;
+use App\Paykey;
 use App\State;
 use Carbon\Carbon;
 use Telegram;
@@ -247,7 +248,10 @@ class MainCtrl extends Controller
                         'first_name' => $first_name
                     ]);
 
+                    $new_admin = true;
+
                 } else {
+                    $new_admin = false;
                     $prev_up = Shvp::getPrevMessage($user_id);
                     if(isset($prev_up['response']['message']))
                         $prev_message = $prev_up['response']['message'];
@@ -265,9 +269,11 @@ class MainCtrl extends Controller
 
 
 
-            // Если повторный запрос то тормозим
-            if($prev_message['date'] == $message['date']) {
-                return '';
+            if(!$new_admin) {
+                // Если повторный запрос то тормозим
+                if ($prev_message['date'] == $message['date']) {
+                    return '';
+                }
             }
 
 
@@ -296,7 +302,7 @@ class MainCtrl extends Controller
 
                     Telegram::sendMessage([
                         'chat_id' => $message['chat']['id'],
-                        'text' => 'Устраивайте розыгрыши призов (телефон, скидочный копон и т.д) на своем канале за подписку, и приглашение участников в группу.' . PHP_EOL . 'Я помогу Вам развить канал',
+                        'text' => 'Устраивайте розыгрыши призов (телефон, скидочный копон и т.д) на своем канале за подписку, и приглашение участников в группу.' . PHP_EOL . 'Я помогу Вам развить канал' . PHP_EOL . 'Сайт бота https://voterpro.ru/',
                         'reply_markup' => $reply_markup
                     ]);
 
@@ -593,7 +599,7 @@ class MainCtrl extends Controller
                                     Keyboard::inlineButton(
                                         [
                                             'text' => 'Получить код публикации на сайте',
-                                            'url' => 'https://google.com/'
+                                            'url' => 'https://voterpro.ru/'
                                         ]
                                     )
 
@@ -603,7 +609,7 @@ class MainCtrl extends Controller
                             $reply_markup = $keyboard;
 
 
-                            $temp_text = 'Выбраны <b>СПЕЦ условия</b> для розыгрыша, публикация такого розыгрыша платная, пройдите по ссылке и получите код публикации стоимость 1300 рублей. Либо введите код, если он у вас есть';
+                            $temp_text = 'Выбраны <b>СПЕЦ условия</b> для розыгрыша, публикация такого розыгрыша платная, пройдите по ссылке и получите код публикации стоимость 1400 рублей. Либо введите код, если он у вас есть';
 
 
                             Telegram::sendMessage([
@@ -687,7 +693,7 @@ class MainCtrl extends Controller
 
                         // Нужно назначить чат для публикации
 
-                        $arrSend = self::getArEditFieldDraw();
+                        $arrSend = Shvp::getArEditFieldDraw();
 
                         $textSend = 'Нельзя опубликовать не выбрав чат к розыгрышу.';
 
@@ -712,6 +718,74 @@ class MainCtrl extends Controller
 
 
                     $new_state['draw_id'] = $prev_draw_id;
+
+
+
+
+                    break;
+
+
+                case 'payPublic':
+
+                    $paykey = Paykey::where('key', trim($message['text']))->where('payer', '1')->where('draw_id', '0')->first();
+
+                    if($paykey !== null){
+
+                        $paykey->draw_id = $prev_draw_id;
+
+                        $paykey->save();
+
+
+                        $draw = Draw::where('id', $prev_draw_id)->first();
+
+                        $new_mes = Shvp::publicDraw($draw);
+
+
+                        $draw->published_at = Carbon::now();
+                        $draw->pay_key = $paykey->key;
+
+                        $draw->status = 'Опубликован';
+
+                        $draw->message_id = $new_mes['message_id'];
+
+                        $message_new_id = Shvp::backDraw($draw, $message['chat']['id'], $draw->text);
+
+                        $draw->edit_message_id = $message_new_id['message_id'];
+                        $draw->save();
+
+                        $new_state['state'] = 'editDraw';
+                        $new_state['draw_id'] = $prev_draw_id;
+
+                    } else {
+
+
+                        $arrSend = Shvp::getArEditFieldDraw();
+
+                        $textSend = 'Код не верный, либо уже активирован.';
+
+                        $arMerg = array_merge(
+                            $arrSend,
+                            [
+                                'chat_id' => $message['chat']['id'],
+                                'text' => $textSend
+                            ]
+                        );
+
+
+
+                        Telegram::sendMessage($arMerg);
+
+
+
+                        $new_state['state'] = 'editDraw';
+                        $new_state['draw_id'] = $prev_draw_id;
+
+
+
+                    }
+
+
+
 
 
 
@@ -836,20 +910,30 @@ class MainCtrl extends Controller
 
                             $temp_text = 'Список ваших чатов:';
 
+                            $reply_markup = $keyboard;
+                            $arKeyboard = array('reply_markup' => $reply_markup,);
+
+                            $arMerg = array_merge($arKeyboard, [
+                                'chat_id' => $message['chat']['id'],
+                                'text' => $temp_text,
+                                'parse_mode' => 'HTML'
+                            ]);
+
                         } else {
                             $temp_text = 'Ваш список чатов пуст, зайдите в главное меню "Управление каналами"';
+
+                            $arMerg = [
+                                'chat_id' => $message['chat']['id'],
+                                'text' => $temp_text,
+                                'parse_mode' => 'HTML'
+                            ];
                         }
 
 
-                        $reply_markup = $keyboard;
 
 
-                        Telegram::sendMessage([
-                            'chat_id' => $message['chat']['id'],
-                            'text' => $temp_text,
-                            'reply_markup' => $reply_markup,
-                            'parse_mode' => 'HTML'
-                        ]);
+
+                        Telegram::sendMessage($arMerg);
 
 
                         $arrSend = Shvp::getArEditFieldDraw();
@@ -966,6 +1050,17 @@ class MainCtrl extends Controller
 
                         $mes = '';
 
+                        $pos = strripos($text, 't.me');
+
+                        if($pos !== false) {
+
+                            $preg = preg_match('/t.me\/(.*)/', $text, $match);
+
+                            $text = $match[1];
+
+                        }
+
+
                         if (Canal::where('chat_username', '=', trim($text))->doesntExist()) {
 
                             $mes = 'Канал, не найден. Возможно меня не добавляли в этот канал.'.PHP_EOL.'Юзернейм канала находится в ссылке (t.me/{username})';
@@ -1021,7 +1116,7 @@ class MainCtrl extends Controller
                         'Устраивайте розыгрыши призов (телефон, скидочный купон и т.д) на своем канале'. PHP_EOL .
                         'Вы можете включить <b>СПЕЦ условия</b> для участия в розыгрыше.' . PHP_EOL .
                         'Например, человек не сможет участвовать пока не добавит в вашу группу 10 (или 50, как вы настроите) своих друзей, знакомых, одноклассников.'. PHP_EOL .
-                        'Я сам определяю и считаю добавленных участников в вашу группу и допускаю к участию.';
+                        'Я сам определяю и считаю добавленных участников в вашу группу и допускаю к участию.'.PHP_EOL.'Сайт бота https://voterpro.ru/';
 
 
                     $keyboard = $this->keyboardHello;
@@ -1172,7 +1267,7 @@ class MainCtrl extends Controller
 
             if (Canal::where('chat_id', '=', $up['chat']['id'])->doesntExist()) {
 
-                if($up['new_chat_member']['status'] != 'left') {
+                if($up['new_chat_member']['status'] != 'left' && isset($up['chat']['title'])) {
 
                     Canal::create([
                         'chat_id' => $up['chat']['id'],

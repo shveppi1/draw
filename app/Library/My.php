@@ -88,6 +88,12 @@ class My
             $tg_state = 'editDraw';
         }
 
+        else if ($state == 'payPublic') {
+            $tg_state = 'payPublic';
+        }
+
+
+
         else if ($text == 'Управление каналами') {
             $tg_state = 'canalList';
         }
@@ -553,7 +559,7 @@ class My
         }
 
         $keyboard = [
-            ['Добавить канал', 'Удалить канал'],
+            ['Добавить канал'],
             ['Назад, в главное меню']
         ];
 
