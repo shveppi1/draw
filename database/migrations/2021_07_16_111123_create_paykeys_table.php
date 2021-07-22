@@ -16,6 +16,7 @@ class CreatePaykeysTable extends Migration
         Schema::create('paykeys', function (Blueprint $table) {
             $table->bigIncrements('id');
             $table->string('key');
+            $table->string('pay_id')->nullable(true);
             $table->string('draw_id')->default(0);
             $table->timestamps();
         });

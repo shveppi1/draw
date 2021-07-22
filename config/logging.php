@@ -100,6 +100,12 @@ return [
             'path' => storage_path('logs/test.log'),
             'level' => 'info',
         ],
+
+        'paylog' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/paylog.log'),
+            'level' => 'info',
+        ],
     ],
 
 ];

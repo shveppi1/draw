@@ -11,19 +11,28 @@
 |
 */
 
+
+/*
 Route::get('/', function () {
     return view('welcome');
 });
+*/
 
-
-Route::any('/tePool/webhook/', 'MainCtrl@update');
-Route::get('/getRespons', 'MainCtrl@respons');
-Route::get('/getState', 'MainCtrl@state');
-Route::get('/drawlist', 'MainCtrl@drawlist');
-Route::get('/draw/{id}/delete', 'MainCtrl@deleteDraw')->name('deleteDraw');
-Route::get('/test', 'MainCtrl@test');
+Route::get('/', 'MainController@index');
+Route::get('/thanks', 'MainController@thanks');
+Route::get('/test', 'MainController@test');
 
 
 
+Route::get('/email', function() {
+
+    \Illuminate\Support\Facades\Mail::to('info@shveppi.ru')->send(new \App\Mail\WelcomeMail());
+
+    return new \App\Mail\WelcomeMail();
+
+});
 
 
+
+Route::post('/ajax/formyoo', 'MainController@createKey');
+Route::post('/yoo/pay/info', 'MainController@payTrans');
