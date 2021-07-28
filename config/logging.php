@@ -95,6 +95,12 @@ return [
             'level' => 'info',
         ],
 
+        'tgprivate' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/privat.log'),
+            'level' => 'info',
+        ],
+
         'test' => [
             'driver' => 'single',
             'path' => storage_path('logs/test.log'),

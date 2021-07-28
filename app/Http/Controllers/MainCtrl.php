@@ -217,6 +217,11 @@ class MainCtrl extends Controller
 
 
 
+            $logTxt = print_r($updates, true);
+
+            Log::channel('tgprivate')->info($logTxt);
+
+
             $user_id = $message['from']['id'];
             $user_name = ( isset($message['from']['username']) ) ? '@' . $message['from']['username'] : $message['from']['first_name'];
             $first_name = $message['from']['first_name'];
@@ -302,7 +307,7 @@ class MainCtrl extends Controller
 
                     Telegram::sendMessage([
                         'chat_id' => $message['chat']['id'],
-                        'text' => 'Устраивайте розыгрыши призов (телефон, скидочный копон и т.д) на своем канале за подписку, и приглашение участников в группу.' . PHP_EOL . 'Я помогу Вам развить канал' . PHP_EOL . 'Сайт бота https://voterpro.ru/',
+                        'text' => 'Устраивайте розыгрыши призов (телефон, скидочный копон и т.д) на своем канале за подписку, и приглашение участников в группу.' . PHP_EOL . 'Я помогу Вам развить канал',
                         'reply_markup' => $reply_markup
                     ]);
 
@@ -512,7 +517,7 @@ class MainCtrl extends Controller
                         $arrSend,
                         [
                             'chat_id' => $message['chat']['id'],
-                            'text' => 'Пришли мне дату окончания розыгрыша в формате: '. Carbon::now()->addHour() . ' по мск'
+                            'text' => 'Пришли мне дату окончания розыгрыша' . PHP_EOL . 'в формате: '. Carbon::now()->addHour() . ' по мск'
                         ]
                     );
 
@@ -609,7 +614,7 @@ class MainCtrl extends Controller
                             $reply_markup = $keyboard;
 
 
-                            $temp_text = 'Выбраны <b>СПЕЦ условия</b> для розыгрыша, публикация такого розыгрыша платная, пройдите по ссылке и получите код публикации стоимость 1400 рублей. Либо введите код, если он у вас есть';
+                            $temp_text = 'Выбраны <b>СПЕЦ условия</b> для розыгрыша, публикация такого розыгрыша платная,'.PHP_EOL.'пройдите по ссылке и получите код публикации стоимость 1100 рублей'.PHP_EOL.PHP_EOL.'Опубликовать бесплатно если поставить количество приглашенных 0.';
 
 
                             Telegram::sendMessage([
@@ -796,7 +801,7 @@ class MainCtrl extends Controller
                 case 'myDrawList':
 
 
-                    $draws = Draw::where('admin_id', $user_id)->get();
+                    $draws = Draw::where('admin_id', $user_id)->where('status', '!=', 'Завершен')->get();
 
                     $arKey = array();
 
@@ -844,10 +849,11 @@ class MainCtrl extends Controller
 
                     $reply_markup = new Keyboard(['keyboard' => $keyboard, 'resize_keyboard' => true, 'one_time_keyboard' => true]);
 
+                    $text_notFin = ($draws->count() > 0) ?  PHP_EOL . 'Завершенные розыгрыши в этом списке не отображаются' : '';
 
                     $arMerg = [
                             'chat_id' => $message['chat']['id'],
-                            'text' => 'Выберите из списка вами добавленных розыгрышей',
+                            'text' => 'Выберите из списка вами добавленных розыгрышей.' . $text_notFin,
                             'reply_markup' => $reply_markup
                         ];
 
@@ -856,7 +862,7 @@ class MainCtrl extends Controller
 
 
 
-                    $new_state['state'] = 'editDraw';
+                    $new_state['state'] = 'main';
 
 
 
@@ -880,7 +886,8 @@ class MainCtrl extends Controller
                             ]
                         );
 
-
+                        $new_state['state'] = 'editDraw';
+                        $new_state['draw_id'] = $prev_draw_id;
 
                         Telegram::sendMessage($arMerg);
 
@@ -1017,7 +1024,11 @@ class MainCtrl extends Controller
 
                 case 'addCanal':
 
-                    $text = 'Добавь меня в администраторы и пришли мне юзернейм чата.'.PHP_EOL.'Юзернейм чата находится в ссылке (t.me/{username})';
+                    $text = 'Добавь меня в администраторы группы!'.PHP_EOL.
+                        'Напиши сюда юзернейм чата.'.PHP_EOL.
+                        'Юзернейм чата находится в ссылке (t.me/{username})'.PHP_EOL.PHP_EOL.
+                        'Либо пропишите в вашей группе команду /voterMyGroup (вы должны быть администратором)'.PHP_EOL.
+                        'В списке появится ваша группа';
 
                     $keyboard = [
                         ['Назад, в главное меню']
@@ -1113,9 +1124,9 @@ class MainCtrl extends Controller
                 case 'hello':
 
                     $text_send = '<b>Я помогу развить канал активностью.</b>' . PHP_EOL .
-                        'Устраивайте розыгрыши призов (телефон, скидочный купон и т.д) на своем канале'. PHP_EOL .
-                        'Вы можете включить <b>СПЕЦ условия</b> для участия в розыгрыше.' . PHP_EOL .
-                        'Например, человек не сможет участвовать пока не добавит в вашу группу 10 (или 50, как вы настроите) своих друзей, знакомых, одноклассников.'. PHP_EOL .
+                        'Устраивайте розыгрыши призов (телефон, скидочный купон и т.д) на своем канале'. PHP_EOL . PHP_EOL .
+                        'Вы можете включить <b>СПЕЦ условия</b> для участия в розыгрыше.' . PHP_EOL . PHP_EOL .
+                        'Например, человек не сможет участвовать пока не добавит в вашу группу 10 (или 50, как вы настроите) своих друзей, знакомых, одноклассников.'. PHP_EOL . PHP_EOL .
                         'Я сам определяю и считаю добавленных участников в вашу группу и допускаю к участию.'.PHP_EOL.'Сайт бота https://voterpro.ru/';
 
 
@@ -1146,6 +1157,8 @@ class MainCtrl extends Controller
                         'chat_id' => $message['chat']['id'],
                         'text' => $text
                     ]);
+
+                    $new_state['state'] = 'main'; // ушли на главную
 
                     break;
 
@@ -1193,6 +1206,62 @@ class MainCtrl extends Controller
         } // if private
 
 
+        // Написали что то в чате групп
+        if( $updates->message && $message['chat']['type'] != 'private' && isset($message['text']) ) {
+
+            if(isset($message['text']) && $message['text'] == '/voterMyGroup') {
+
+
+                $logTxt = print_r($updates, true);
+
+                Log::channel('test')->info($logTxt);
+
+                $from['user_id'] = $message['from']['id'];
+                $from['user_name'] = ( isset($message['from']['username']) ) ? '@' . $message['from']['username'] : $message['from']['first_name'];
+                $from['first_name'] = $message['from']['first_name'];
+                $chat['chat_id'] = $message['chat']['id'];
+
+
+
+
+                try
+                {
+                    $arMember = array(
+                        'chat_id' => $chat['chat_id'],
+                        'user_id' => $from['user_id']
+                    );
+
+                    $resMember = Telegram::getChatMember($arMember);
+
+                    if( $resMember['status'] == 'creator' || $resMember['status'] == 'administrator' ){
+                        $admin_status_chat = true;
+                    }
+
+                }
+                catch (\Exception $e)
+                {
+
+                }
+
+                if(isset($admin_status_chat)){
+                    if(Admin::where('user_id', $from['user_id'])->exists()){
+
+                        $canal = Canal::where('chat_id', $chat['chat_id'])->first();
+
+                        $canal->admin_id = $from['user_id'];
+
+                        $canal->save();
+
+                    }
+                }
+
+
+
+
+            }
+
+
+        }
 
 
 
@@ -1269,11 +1338,17 @@ class MainCtrl extends Controller
 
                 if($up['new_chat_member']['status'] != 'left' && isset($up['chat']['title'])) {
 
-                    Canal::create([
+                    $arrAdd = [
                         'chat_id' => $up['chat']['id'],
                         'chat_title' => $up['chat']['title'],
-                        'chat_username' => $up['chat']['username'],
-                    ]);
+
+                    ];
+
+                    if(isset($up['chat']['username'])) {
+                        $arrAdd['chat_username'] = $up['chat']['username'];
+                    }
+
+                    Canal::create($arrAdd);
 
                 }
 
@@ -1354,155 +1429,33 @@ class MainCtrl extends Controller
 
 
     public function test() {
-        /*$prev_up = Shvp::getPrevMessage('107685462');
-        //$prev_up = Admin::where('user_id', '107685462')->first();
-
-        dd($prev_up);
-
-        if(isset($prev_up['response']['message']))
-            $prev_message = $prev_up['response']['message'];
-        if(isset($prev_up['state']))
-            $prev_state = $prev_up['state'];
-        if(isset($prev_up['draw_id']))
-            $prev_draw_id = $prev_up['draw_id'];*/
-
-        /*$keyboard = Keyboard::make()
-            ->inline()
-            ->row(
-                Keyboard::inlineButton(
-                    [
-                        'text' => '-Победитель',
-                        'callback_data' => '-pob'
-                    ]), Keyboard::inlineButton(
-                [
-                    'text' => '+Победитель',
-                    'callback_data' => '+pob'
-                ])
-            );
 
 
-
-        $reply_markup = $keyboard;
-
-
-        $temp_text = '';
-        $temp_text .= '<b>Что вы хотите изменить в розыгрыше ?</b>'. PHP_EOL;
-
-
-
-        $draw_edit_m = Telegram::sendMessage([
-            'chat_id' => '107685462',
-            'text' => $temp_text,
-            'parse_mode' => 'HTML',
-            'reply_markup' => $reply_markup
-        ]);*/
-
-        /*
-        $temp_text = '<b>Что вы хотите изменить в soobshenii ?</b>';
-
-        $arr = [
-            'chat_id' => '107685462',
-            'message_id' => '462',
-            'text' => $temp_text,
-            'parse_mode' => 'HTML',
-        ];
-
-        $res = Telegram::editMessageText($arr);
-        */
-
-       /* $callback['data'] = '(editDraw)[-pob][sdsd]'.Str::random(6);
-
-
-        $res = substr($callback['data'], 0, strpos($callback['data'], ']') + 1);
-
-
-        preg_match('/\[.*?\]/', $res, $method);
-        preg_match('/\(.*?\)/', $res, $action);
-
-
-        dd($action[0]);*/
-
-       //$res = Shvp::getPrevMessage('107685462');
-
-/*
-        $draw = Draw::where('id', '6')->first();
-
-
-        $draw->text = '11xczxczc21231312312';
-        $draw->save();
-
-        $draw->text_btn = '(5) Участвовать';
-        $draw->save();*/
-
-        //$prev_up = Shvp::getPrevMessage('107685462');
-
-
-        /*
-        $date = '2021-07-21 21:00';
-        $parse_date = Carbon::parse($date)->format('Y-m-d H:i:s');
-
-
-
-
-
-        $keyboard1 = Keyboard::make()
-            ->inline()
-            ->row(
-                Keyboard::inlineButton(
-                    [
-                        'text' => '-Победитель',
-                        'callback_data' => Str::random(6)
-                    ]
-                )
-            )
-            ->row(
-                Keyboard::inlineButton(
-                    [
-                        'text' => 'кнопка 1',
-                        'callback_data' => Str::random(6)
-                    ]
-                )
-            );
-
-
-
-        $array = array(
-            ['name' => 'button 1'],
-            ['name' => 'button 2'],
-            ['name' => 'button 3'],
-            ['name' => 'button 4'],
+        $arMember = array(
+            'chat_id' => '-495557507',
+            'user_id' => '107685462'
         );
 
+        //$resMember = Telegram::getChatMember($arMember);
 
-        $keyboard = Keyboard::make()->inline();
-        foreach ($array as $chat) {
-            $keyboard = $keyboard->row(
-                Keyboard::inlineButton([
-                    'text' => $chat['name'],
-                    'callback_data' => Str::random(6)
-                ])
-            );
-        }
+        $arMember = array(
+            'chat_id' => '-1001222902126',
+        );
 
+        $resMember = Telegram::getChatAdministrators($arMember);
 
-        $callback['data'] = '(editDrawAddCanal)[1312312]' . Str::random(6);
+        dd($resMember);
 
 
-        $res_sub = substr($callback['data'], 0, strpos($callback['data'], ']') + 1);
-
-        preg_match('/\[(.*?)\]/', $res_sub, $method);
-
-        */
 
 
-        $draw = Draw::where('date_finish', '<', date('Y-m-d H:i:s'))->where('published_at', '<>', '')->get();
 
 
         echo date('Y-m-d H:i:s');
         //$draw->
 
 
-       return dd($draw);
+       return dd([]);
 
 
 
