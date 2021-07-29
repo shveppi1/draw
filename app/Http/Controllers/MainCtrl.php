@@ -5,7 +5,9 @@ namespace App\Http\Controllers;
 
 use App\Admin;
 use App\Canal;
+use App\Champion;
 use App\Draw;
+use App\Member;
 use App\Participant;
 use App\Paykey;
 use App\State;
@@ -144,6 +146,151 @@ class MainCtrl extends Controller
 
 
                         Shvp::saveState($user_id, $new_state);
+
+
+
+                        break;
+
+
+
+
+                    case '(editMyDrawComplited)':
+
+
+                        $message = $callback['message'];
+                        $user_id = $message['chat']['id'];
+
+                        // Получаем ID розыгрыша
+                        $res_sub = substr($callback['data'], 0, strpos($callback['data'], ']') + 1);
+                        preg_match('/\[(.*?)\]/', $res_sub, $method);
+
+                        $draw_id = $method['1'];
+
+                        $draw = Draw::where('id', $draw_id)->first();
+
+                        $message_new_id = Shvp::editComplitedDraw($draw, $user_id, $draw->text);
+
+                        $draw->edit_message_id = $message_new_id['message_id'];
+                        $draw->save();
+
+                        $new_state['state'] = 'myDrawListComplited';
+                        $new_state['draw_id'] = $draw->id;
+
+
+                        Shvp::saveState($user_id, $new_state);
+
+
+
+                        break;
+
+
+                    case '(rerolVictoryComplitedDraw)':
+
+                        $message = $callback['message'];
+                        $user_id = $message['chat']['id'];
+
+                        // Получаем ID розыгрыша
+                        $res_sub = substr($callback['data'], 0, strpos($callback['data'], ']') + 1);
+                        preg_match('/\[(.*?)\]/', $res_sub, $method);
+
+                        $draw_id = $method['1'];
+
+                        $draw = Draw::where('id', $draw_id)->first();
+
+
+
+
+
+                        Champion::where('draw_id', $draw->id)->delete();
+
+                        $members = Member::where('draw_id', $draw->id)->inRandomOrder()->limit($draw->count_victory)->get();
+
+                        $victory_send = '';
+
+                        if ($members->count()) {
+
+                            // Собираем и сохраняем победителей
+                            foreach ($members as $member) {
+
+                                Champion::create([
+                                    'user_id' => $member->user_id,
+                                    'draw_id' => $member->draw_id,
+                                    'user_name' => $member->user_name,
+                                    'first_name' => $member->first_name,
+                                ]);
+
+
+                                $user_name = (isset($member->user_name)) ? $member->user_name : $member->first_name;
+
+                                $victory_send .= '<a href="tg://user?id=' . $member->user_id . '">' . $user_name . '</a>' . PHP_EOL;
+
+                                unset($user_name);
+
+                            }
+
+                        } else {
+                            $victory_send = 'Победителей нет. Ни одного участника не было';
+                        }
+
+
+                        $temp_text = '';
+                        $temp_text .= 'Текст розыгрыша: ' . $draw->text . PHP_EOL;
+                        $temp_text .= 'Время окончания: ' . $draw->date_finish . PHP_EOL;
+                        $temp_text .= 'Группа: ' . $draw->chat_title . PHP_EOL;
+                        $temp_text .= 'Победители: ' . $victory_send . PHP_EOL;
+
+
+                        $keyboard = Keyboard::make()
+                            ->inline()
+                            ->row(
+                                Keyboard::inlineButton(
+                                    [
+                                        'text' => 'Перевыбрать победителей',
+                                        'callback_data' => '(rerolVictoryComplitedDraw)['.$draw->id.']' . Str::random(6)
+                                    ]
+                                )
+
+                            );
+
+                        // Меняем сообщение у админа
+                        $reply_markup = $keyboard;
+                        $arr = array(
+                            'chat_id' => $message['chat']['id'],
+                            'text' => $temp_text,
+                            'message_id' => $draw->edit_message_id,
+                            'parse_mode' => 'HTML',
+                            'reply_markup' => $reply_markup
+                        );
+
+
+                        Telegram::editMessageText($arr);
+
+
+
+                        // Меняем сообщение в публичном чате
+                        $text_send = '<b>'.$draw->text.'</b>'.PHP_EOL;
+                        $text_send .= 'Завершен! Поздравляем победителей:'.PHP_EOL;
+                        $text_send .= $victory_send;
+
+
+                        $arrSend = array(
+                            'chat_id' => $draw->chat_id,
+                            'text' => $text_send,
+                            'message_id' => $draw->message_id,
+                            'parse_mode' => 'HTML',
+                        );
+
+
+
+                        try {
+                            Telegram::editMessageText($arrSend);
+                        }
+                        catch (Telegram\Bot\Exceptions\TelegramResponseException $err) {
+
+                        }
+
+
+
 
 
 
@@ -307,7 +454,7 @@ class MainCtrl extends Controller
 
                     Telegram::sendMessage([
                         'chat_id' => $message['chat']['id'],
-                        'text' => 'Устраивайте розыгрыши призов (телефон, скидочный купон и т.д) на своем канале за подписку, и приглашение участников в группу.' . PHP_EOL . 'Я помогу Вам развить канал',
+                        'text' => 'Устраивайте розыгрыши призов (телефон, скидочный купон и т.д) на своем канале за подписку, и приглашение участников в группу.' . PHP_EOL . 'Я помогу Вам развить канал'. PHP_EOL . 'Тех. поддержка: @shveeps',
                         'reply_markup' => $reply_markup
                     ]);
 
@@ -844,6 +991,7 @@ class MainCtrl extends Controller
 
 
                     $keyboard = [
+                        ['Завершенные'],
                         ['Назад, в главное меню']
                     ];
 
@@ -865,6 +1013,31 @@ class MainCtrl extends Controller
                     $new_state['state'] = 'main';
 
 
+
+                    break;
+
+
+
+                case 'myDrawListComplited':
+
+
+                    Shvp::myDrawListComplited($message, $user_id);
+
+                    $new_state['state'] = 'myDrawListComplited';
+
+
+
+                    break;
+
+                // Убираем админа с розыгрыша
+                case 'deleteDrawComplited':
+
+
+                    $draw = Draw::where('id', $prev_draw_id)->first();
+                    $draw->admin_id = 0;
+                    $draw->save();
+                    Shvp::myDrawListComplited($message, $user_id);
+                    $new_state['state'] = 'myDrawListComplited';
 
                     break;
 
@@ -1127,7 +1300,8 @@ class MainCtrl extends Controller
                         'Устраивайте розыгрыши призов (телефон, скидочный купон и т.д) на своем канале'. PHP_EOL . PHP_EOL .
                         'Вы можете включить <b>СПЕЦ условия</b> для участия в розыгрыше.' . PHP_EOL . PHP_EOL .
                         'Например, человек не сможет участвовать пока не добавит в вашу группу 10 (или 50, как вы настроите) своих друзей, знакомых, одноклассников.'. PHP_EOL . PHP_EOL .
-                        'Я сам определяю и считаю добавленных участников в вашу группу и допускаю к участию.'.PHP_EOL.'Сайт бота https://voterpro.ru/';
+                        'Я сам определяю и считаю добавленных участников в вашу группу и допускаю к участию.'.PHP_EOL.'Сайт бота https://voterpro.ru/'. PHP_EOL .
+                        'Тех. поддержка: @shveeps';
 
 
                     $keyboard = $this->keyboardHello;

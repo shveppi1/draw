@@ -6,6 +6,7 @@ namespace App\Library;
 
 use App\Admin;
 use App\Canal;
+use App\Champion;
 use App\Draw;
 use App\Member;
 use App\Participant;
@@ -69,6 +70,20 @@ class My
             $tg_state = 'myDrawList';
         }
 
+        else if ($text == 'Завершенные') {
+            $tg_state = 'myDrawListComplited';
+        }
+
+        else if ($text == 'Назад, к списку завершенных') {
+            $tg_state = 'myDrawListComplited';
+        }
+
+        else if ($text == 'Удалить данный розыгрыш') {
+            $tg_state = 'deleteDrawComplited';
+        }
+
+
+
         else if ($state == 'editedDrawText') {
             $tg_state = 'editedDrawText';
         }
@@ -85,6 +100,11 @@ class My
             $tg_state = 'backToDraw';
         }
 
+        else if ($text == 'Назад, к списку розыгрышей') {
+            $tg_state = 'myDrawList';
+        }
+
+
         else if ($state == 'editDraw') {
             $tg_state = 'editDraw';
         }
@@ -92,6 +112,8 @@ class My
         else if ($state == 'payPublic') {
             $tg_state = 'payPublic';
         }
+
+
 
 
 
@@ -404,6 +426,72 @@ class My
 
 
 
+    public static function myDrawListComplited($message, $user_id) {
+
+
+        $draws = Draw::where('admin_id', $user_id)->where('status', '=', 'Завершен')->get();
+
+        $arKey = array();
+
+        if ($draws->count() > 0) {
+
+            $keyboard = Keyboard::make()->inline();
+            foreach ($draws as $draw) {
+                $keyboard = $keyboard->row(
+                    Keyboard::inlineButton(
+                        [
+                            'text' => $draw->text,
+                            'callback_data' => '(editMyDrawComplited)[' . $draw->id . ']' . Str::random(6)
+                        ]
+                    )
+
+                );
+            }
+
+            $temp_text = 'Список завершенных розыгрышей:';
+
+            $reply_markup = $keyboard;
+
+            $arKey = array(
+                'reply_markup' => $reply_markup
+            );
+
+        } else {
+            $temp_text = 'У вас нет завершенных розыгрышей';
+        }
+
+
+        $arMerg = array_merge($arKey, [
+            'chat_id' => $message['chat']['id'],
+            'text' => $temp_text,
+            'parse_mode' => 'HTML'
+        ]);
+
+
+        Telegram::sendMessage($arMerg);
+
+
+        $keyboard = [
+            ['Назад, к списку розыгрышей']
+        ];
+
+        $reply_markup = new Keyboard(['keyboard' => $keyboard, 'resize_keyboard' => true, 'one_time_keyboard' => true]);
+
+
+
+        $arMerg = [
+            'chat_id' => $message['chat']['id'],
+            'text' => 'Выберите из списка завершенных розыгрышей.',
+            'reply_markup' => $reply_markup
+        ];
+
+        Telegram::sendMessage($arMerg);
+
+
+    }
+
+
+
 
 
     public static function getArEditFieldDraw() {
@@ -520,6 +608,81 @@ class My
 
     }
 
+    public static function viewBtnArComplitedDraw() {
+
+        $keyboard = [
+            ['Удалить данный розыгрыш'],
+            ['Назад, к списку завершенных'],
+            ['Назад, в главное меню']
+        ];
+
+        $reply_markup = new Keyboard(['keyboard' => $keyboard, 'resize_keyboard' => true, 'one_time_keyboard' => true]);
+
+
+        $arr = array(
+            'parse_mode' => 'HTML',
+            'reply_markup' => $reply_markup
+        );
+
+        return $arr;
+
+
+    }
+
+
+    public static function viewInlineBtnArComplitedDraw($draw) {
+
+
+        $keyboard = Keyboard::make()
+            ->inline()
+            ->row(
+                Keyboard::inlineButton(
+                    [
+                        'text' => 'Перевыбрать победителей',
+                        'callback_data' => '(rerolVictoryComplitedDraw)['.$draw->id.']' . Str::random(6)
+                    ]
+                )
+
+            );
+
+
+        $reply_markup = $keyboard;
+
+
+
+        $champions = Champion::where('draw_id', $draw->id)->get();
+        $victory_send = '';
+        foreach($champions as $champion){
+
+            $user_name = (isset($champion->user_name)) ? $champion->user_name : $champion->first_name;
+
+            $victory_send .= '<a href="tg://user?id='.$champion->user_id.'">'.$user_name.'</a>'. PHP_EOL;
+
+            unset($user_name);
+
+        }
+
+
+
+        $temp_text = '';
+        $temp_text .= 'Текст розыгрыша: ' . $draw->text . PHP_EOL;
+        $temp_text .= 'Время окончания: ' . $draw->date_finish . PHP_EOL;
+        $temp_text .= 'Группа: ' . $draw->chat_title . PHP_EOL;
+        $temp_text .= 'Победители: ' . $victory_send . PHP_EOL;
+
+
+        $arDraw = array(
+            'text' => $temp_text,
+            'parse_mode' => 'HTML',
+            'reply_markup' => $reply_markup
+        );
+
+
+        return $arDraw;
+
+
+    }
+
 
 
     public static function backDraw($draw, $chat_id, $text = '') {
@@ -534,6 +697,26 @@ class My
 
         // Второе сообщение с описанием розыгрыша и встроенным меню
         $arDrawSend = self::getArDrawSend($draw);
+        $arMerg = array_merge( $arDrawSend, ['chat_id' => $chat_id] );
+
+
+        $draw_edit_m = Telegram::sendMessage($arMerg);
+        return $draw_edit_m;
+
+    }
+
+    public static function editComplitedDraw($draw, $chat_id, $text = '') {
+
+
+        // Первое сообщение с названием розыгрыша и меню
+        $arrSend = self::viewBtnArComplitedDraw();
+        $arrSend = array_merge($arrSend, ['chat_id' => $chat_id, 'text' => $text,]);
+
+        Telegram::sendMessage($arrSend);
+
+
+        // Второе сообщение с описанием розыгрыша и встроенным меню
+        $arDrawSend = self::viewInlineBtnArComplitedDraw($draw);
         $arMerg = array_merge( $arDrawSend, ['chat_id' => $chat_id] );
 
 
@@ -684,7 +867,7 @@ class My
 
         $param = [
             'callback_query_id' => $callback['id'],
-            'cache_time' => 6,
+            'cache_time' => 10,
             'show_alert' => true
         ];
 
@@ -767,7 +950,17 @@ class My
         }
 
 
+        try {
             Telegram::answerCallbackQuery($param);
+        }
+        catch (Telegram\Bot\Exceptions\TelegramResponseException $err) {
+
+            $logTxt = print_r($err, true);
+
+            Log::channel('test')->info($logTxt);
+
+        }
+
 
 
 
