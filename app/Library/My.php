@@ -758,10 +758,15 @@ class My
 
 
 
+        try
+        {
+            Telegram::answerCallbackQuery($param);
+        }
+        catch (\Exception $e)
+        {
 
+        }
 
-
-        Telegram::answerCallbackQuery($param);
 
         self::editDrawPublicMessage($draw);
 

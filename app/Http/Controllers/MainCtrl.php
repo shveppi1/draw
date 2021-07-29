@@ -307,7 +307,7 @@ class MainCtrl extends Controller
 
                     Telegram::sendMessage([
                         'chat_id' => $message['chat']['id'],
-                        'text' => 'Устраивайте розыгрыши призов (телефон, скидочный копон и т.д) на своем канале за подписку, и приглашение участников в группу.' . PHP_EOL . 'Я помогу Вам развить канал',
+                        'text' => 'Устраивайте розыгрыши призов (телефон, скидочный купон и т.д) на своем канале за подписку, и приглашение участников в группу.' . PHP_EOL . 'Я помогу Вам развить канал',
                         'reply_markup' => $reply_markup
                     ]);
 
@@ -517,7 +517,7 @@ class MainCtrl extends Controller
                         $arrSend,
                         [
                             'chat_id' => $message['chat']['id'],
-                            'text' => 'Пришли мне дату окончания розыгрыша' . PHP_EOL . 'в формате: '. Carbon::now()->addHour() . ' по мск'
+                            'text' => 'Пришли мне дату окончания розыгрыша' . PHP_EOL . 'в формате: '. Carbon::now()->addHour()->format('Y-m-d H:i') . ' по мск'
                         ]
                     );
 
@@ -1027,7 +1027,7 @@ class MainCtrl extends Controller
                     $text = 'Добавь меня в администраторы группы!'.PHP_EOL.
                         'Напиши сюда юзернейм чата.'.PHP_EOL.
                         'Юзернейм чата находится в ссылке (t.me/{username})'.PHP_EOL.PHP_EOL.
-                        'Либо пропишите в вашей группе команду /voterMyGroup (вы должны быть администратором)'.PHP_EOL.
+                        'Либо пропишите в вашей группе команду /voterPro (вы должны быть администратором)'.PHP_EOL.
                         'В списке появится ваша группа';
 
                     $keyboard = [
@@ -1209,7 +1209,7 @@ class MainCtrl extends Controller
         // Написали что то в чате групп
         if( $updates->message && $message['chat']['type'] != 'private' && isset($message['text']) ) {
 
-            if(isset($message['text']) && $message['text'] == '/voterMyGroup') {
+            if(isset($message['text']) && $message['text'] == '/voterPro') {
 
 
                 $logTxt = print_r($updates, true);
@@ -1265,6 +1265,31 @@ class MainCtrl extends Controller
 
 
 
+        // Поменялся тип у группы
+        if( $updates->message && $message['chat']['type'] != 'private' && isset($message['migrate_to_chat_id']) ) {
+
+            $chat['chat_id'] = $message['chat']['id'];
+
+            $canal = Canal::where('chat_id', $chat['chat_id'])->first();
+
+            $canal->chat_id = $message['migrate_to_chat_id'];
+
+            $canal->save();
+
+        }
+
+
+        // Удаление канала если бота выгнали из него
+        if( $updates->message && $message['chat']['type'] != 'private' && isset($message['left_chat_member']) ) {
+
+            if(isset($message['left_chat_member']['username']) && $message['left_chat_member']['username'] == 'VoterPro_Bot'){
+                $chat['chat_id'] = $message['chat']['id'];
+                Canal::where('chat_id', $chat['chat_id'])->delete();
+            }
+
+
+        }
+
 
         // Добавление участников в группу
         if(isset($message['new_chat_participant']) && isset($message['new_chat_members']) ) {
@@ -1279,13 +1304,21 @@ class MainCtrl extends Controller
 
                     if(Participant::where('part_id', '=', $partic['id'])->where('chat_id', '=', $message['chat']['id'])->doesntExist()) {
 
-                        Participant::create([
+                        $arPartAdd = [
                             'member_id' => $message['from']['id'],
                             'chat_id' => $message['chat']['id'],
                             'part_id' => $partic['id'],
                             'first_name' => $partic['first_name'],
-                            'user_name' => $partic['username'],
-                        ]);
+                        ];
+                        if(isset($partic['username'])){
+                            $arPartAdd['user_name'] = $partic['username'];
+                        } else {
+                            $arPartAdd['user_name'] = $partic['first_name'];
+                        }
+
+                        Participant::create($arPartAdd);
+
+                        unset($arPartAdd);
 
                     }
 
@@ -1303,13 +1336,21 @@ class MainCtrl extends Controller
 
                         if(Participant::where('part_id', '=', $member['id'])->where('chat_id', '=', $message['chat']['id'])->doesntExist()) {
 
-                            Participant::create([
+
+                            $arPartAdd = [
                                 'member_id' => $message['from']['id'],
                                 'chat_id' => $message['chat']['id'],
                                 'part_id' => $member['id'],
                                 'first_name' => $member['first_name'],
-                                'user_name' => $member['username'],
-                            ]);
+                            ];
+
+                            if(isset($member['username'])) {
+                                $arPartAdd['user_name'] = $member['username'];
+                            }else {
+                                $arPartAdd['user_name'] = $member['first_name'];
+                            }
+
+                            Participant::create($arPartAdd);
 
                         }
 
@@ -1334,8 +1375,9 @@ class MainCtrl extends Controller
 
             $up = $updates->my_chat_member;
 
-            if (Canal::where('chat_id', '=', $up['chat']['id'])->doesntExist()) {
+            if (Canal::where('chat_id', $up['chat']['id'])->doesntExist()) {
 
+                // Добавляем канал
                 if($up['new_chat_member']['status'] != 'left' && isset($up['chat']['title'])) {
 
                     $arrAdd = [
@@ -1348,7 +1390,49 @@ class MainCtrl extends Controller
                         $arrAdd['chat_username'] = $up['chat']['username'];
                     }
 
-                    Canal::create($arrAdd);
+                    $canal = Canal::create($arrAdd);
+
+                    unset($arrAdd);
+
+
+                    if($up['new_chat_member']['status'] == 'administrator' && isset($up['chat']['type'])) {
+
+                        if($up['chat']['type'] == 'channel'){
+                            $chat['chat_id'] = $up['chat']['id'];
+                            $from['user_id'] = $up['from']['id'];
+
+                            try
+                            {
+                                $arMember = array(
+                                    'chat_id' => $chat['chat_id'],
+                                    'user_id' => $from['user_id']
+                                );
+
+                                $resMember = Telegram::getChatMember($arMember);
+
+                                if( $resMember['status'] == 'creator' || $resMember['status'] == 'administrator' ){
+                                    $admin_status_chat = true;
+                                }
+
+                            }
+                            catch (\Exception $e)
+                            {
+
+                            }
+
+                            if(isset($admin_status_chat)) {
+                                $admin = Admin::where('user_id', $from['user_id'])->first();
+
+                                if($admin){
+                                    $canal->admin_id = $from['user_id'];
+                                    $canal->save();
+                                }
+                            }
+
+                        }
+
+                    }
+
 
                 }
 
@@ -1373,24 +1457,7 @@ class MainCtrl extends Controller
     }
 
 
-    public function respons() {
 
-        /*$draw = Draw::create([
-            'text' => '12312',
-            'admin_id' => '123123',
-            'date_finish' => Carbon::now()->addHour(),
-        ]);*/
-
-        $draw = Draw::where('id', 29)->first();
-
-
-        dd($draw);
-
-
-
-
-        return '';
-    }
 
 
     public function state() {

@@ -52,7 +52,7 @@ class StopDraw extends Command
         $aRdraws = Draw::where('date_finish', '<', date('Y-m-d H:i:s'))->where('published_at', '<>', '')->where('status', 'Опубликован')->get();
 
 
-
+        $log_arr = array();
 
 
         if($aRdraws->count()) {
@@ -68,7 +68,7 @@ class StopDraw extends Command
 
 
 
-                $victory_send = '';
+
 
                 if ($members->count()) {
 
@@ -97,44 +97,53 @@ class StopDraw extends Command
 
 
 
-                    // Отправляем сообщение
 
 
-                    $text_send = '<b>'.$draw->text.'</b>'.PHP_EOL;
-                    $text_send .= 'Завершен! Поздравляем победителей:'.PHP_EOL;
-                    $text_send .= $victory_send;
-
-
-                    $arrSend = array(
-                        'chat_id' => $draw->chat_id,
-                        'text' => $text_send,
-                        'message_id' => $draw->message_id,
-                        'parse_mode' => 'HTML',
-                    );
-
-
-                    Telegram::editMessageText($arrSend);
-
-                    $arrSendAdmin = array(
-                        'chat_id' => $draw->admin_id,
-                        'text' => $text_send,
-                        'parse_mode' => 'HTML',
-                    );
-
-
-                    Telegram::sendMessage($arrSendAdmin);
-
-
-
+                } else {
+                    $victory_send = 'Победителей нет. Ни одного участника не было';
                 }
 
 
 
+                // Отправляем сообщение
+
+                $text_send = '<b>'.$draw->text.'</b>'.PHP_EOL;
+                $text_send .= 'Завершен! Поздравляем победителей:'.PHP_EOL;
+                $text_send .= $victory_send;
 
 
-                $draw->status = 'Завершен';
+                $arrSend = array(
+                    'chat_id' => $draw->chat_id,
+                    'text' => $text_send,
+                    'message_id' => $draw->message_id,
+                    'parse_mode' => 'HTML',
+                );
 
-                $draw->save();
+
+                $edit_succes = Telegram::editMessageText($arrSend);
+
+                $arrSendAdmin = array(
+                    'chat_id' => $draw->admin_id,
+                    'text' => $text_send,
+                    'parse_mode' => 'HTML',
+                );
+
+
+                Telegram::sendMessage($arrSendAdmin);
+
+
+
+                if($edit_succes) {
+
+                    $draw->status = 'Завершен';
+
+                    $draw->save();
+
+                }
+
+
+                $log_arr[$draw->id]['draw_id'] = $draw->id;
+                $log_arr[$draw->id]['victory'] = $victory_send;
 
 
             }
@@ -144,7 +153,7 @@ class StopDraw extends Command
 
 
 
-        $logTxt = print_r($aRdraws, true);
+        $logTxt = print_r($log_arr, true);
 
         Log::channel('drawstop')->info($logTxt);
     }
