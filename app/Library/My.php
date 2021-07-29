@@ -9,10 +9,11 @@ use App\Canal;
 use App\Draw;
 use App\Member;
 use App\Participant;
-use Carbon\Carbon;
+use Illuminate\Support\Carbon;
 use Telegram;
 use Telegram\Bot\Keyboard\Keyboard;
 use Illuminate\Support\Str;
+use Log;
 
 class My
 {
@@ -598,9 +599,9 @@ class My
         $text = '';
 
         $text .= "<b>".$draw->text."</b>".PHP_EOL;
-        $text .= "Участников: 0 чел.".PHP_EOL;
-        $text .= "Победителей: " . $draw->count_victory . PHP_EOL;
-        $text .= "Продлится до ". Carbon::parse($draw->date_finish)->format('Y-m-d H:i') . " по мск.";
+        //$text .= "Участников: 0 чел.".PHP_EOL;
+        //$text .= "Победителей: " . $draw->count_victory . PHP_EOL;
+        //$text .= "Продлится до ". Carbon::parse($draw->date_finish)->format('Y-m-d H:i') . " по мск.";
 
 
         $arr = array(
@@ -640,9 +641,9 @@ class My
             $text = '';
 
             $text .= "<b>" . $draw->text . "</b>" . PHP_EOL;
-            $text .= "Участников: ".$members_count." чел." . PHP_EOL;
-            $text .= "Победителей: " . $draw->count_victory . PHP_EOL;
-            $text .= "Продлится до " . Carbon::parse($draw->date_finish)->format('Y-m-d H:i') . " по мск.";
+            //$text .= "Участников: ".$members_count." чел." . PHP_EOL;
+            //$text .= "Победителей: " . $draw->count_victory . PHP_EOL;
+            //$text .= "Продлится до " . Carbon::parse($draw->date_finish)->format('Y-m-d H:i') . " по мск.";
 
 
             $arr = array(
@@ -663,7 +664,8 @@ class My
 
 
 
-    public static function addMembers($callback) {
+    public static function addMembers($callback)
+    {
 
 
         $up = $callback;
@@ -677,98 +679,103 @@ class My
 
         $draw_id = $method['1'];
 
+        $draw = Draw::where('id', $draw_id)->first();
 
 
-        $resMember = self::checkSubscribe($message['chat']['id'], $user_id);
+        $param = [
+            'callback_query_id' => $callback['id'],
+            'cache_time' => 6,
+            'show_alert' => true
+        ];
+
+        // Продолжаем собирать участников
+        if ($draw->date_finish > date('Y-m-d H:i:s')) {
+
+
+            $resMember = self::checkSubscribe($message['chat']['id'], $user_id);
+
+
+            if ($resMember && $resMember['status'] != 'kicked' && $resMember['status'] != 'left' && !$callback['from']['is_bot']) {
+
+
+                //
+
+                $new_part = ($draw->new_part == 0) ? false : true;
+                $count_part = $draw->count_part;
+
+                $addMemberSt = true;
 
 
 
-        if($resMember && $resMember['status'] != 'kicked' && $resMember['status'] != 'left' && !$callback['from']['is_bot']) {
 
-            $draw = Draw::where('id', $draw_id)->first();
+                if ($count_part > 0) {
+                    $addMemberSt = false;
 
-            $new_part = ($draw->new_part == 0) ? false : true;
-            $count_part = $draw->count_part;
+                    if ($new_part) {
+                        $arParts = Participant::where('member_id', $user_id)->where('chat_id', $message['chat']['id'])->where('created_at', '>', $draw->published_at)->get();
+                    } else {
+                        $arParts = Participant::where('member_id', $user_id)->where('chat_id', $message['chat']['id'])->get();
+                    }
 
-            $addMemberSt = true;
+                    $count_mypart = $arParts->count();
 
-            $param = [
-                'callback_query_id' => $callback['id'],
-                'cache_time' => 0,
-                'show_alert' => true
-            ];
-
-
-            if ($count_part > 0) {
-                $addMemberSt = false;
-
-                if ($new_part) {
-                    $arParts = Participant::where('member_id', $user_id)->where('chat_id', $message['chat']['id'])->where('created_at', '>', $draw->published_at)->get();
-                } else {
-                    $arParts = Participant::where('member_id', $user_id)->where('chat_id', $message['chat']['id'])->get();
+                    if ($count_mypart >= $count_part) {
+                        $addMemberSt = true;
+                    }
                 }
 
-                $count_mypart = $arParts->count();
 
-                if ($count_mypart >= $count_part) {
-                    $addMemberSt = true;
-                }
-            }
+                // Если еще не участвует
+                if (Member::where('user_id', $user_id)->where('draw_id', $draw_id)->doesntExist()) {
 
 
+                    // Если хватает приглашенных либо вообще не нужны
+                    if ($addMemberSt) {
+
+                        Member::create([
+                            'draw_id' => $draw_id,
+                            'user_id' => $user_id,
+                            'user_name' => $user_name,
+                            'first_name' => $first_name,
+                        ]);
 
 
+                        $param['text'] = 'Вы стали участником!';
 
-            // Если еще не участвует
-            if (Member::where('user_id', $user_id)->where('draw_id', $draw_id)->doesntExist()) {
+                    } else {
 
+                        $count_send_mypart = (isset($count_mypart)) ? $count_mypart : 0;
+                        $param['text'] = 'Для участия добавьте ' . $count_part . ' друга в эту группу! ' . PHP_EOL;
+                        $param['text'] .= 'Обязательное условие!' . PHP_EOL;;
+                        $param['text'] .= 'Вы уже добавили ' . $count_send_mypart . ' участников.';
 
-                // Если хватает приглашенных либо вообще не нужны
-                if ($addMemberSt) {
+                    }
 
-                    Member::create([
-                        'draw_id' => $draw_id,
-                        'user_id' => $user_id,
-                        'user_name' => $user_name,
-                        'first_name' => $first_name,
-                    ]);
-
-
-                    $param['text'] = 'Вы стали участником!';
-
-                } else {
-
-                    $count_send_mypart = (isset($count_mypart)) ? $count_mypart : 0;
-                    $param['text'] = 'Для участия добавьте ' . $count_part . ' друга в эту группу! ' . PHP_EOL;
-                    $param['text'] .= 'Обязательное условие!' . PHP_EOL;;
-                    $param['text'] .= 'Вы уже добавили ' . $count_send_mypart . ' участников.';
-
+                } else { // Уже участвует
+                    $param['text'] = 'Вы участвуете!';
                 }
 
-            } else { // Уже участвует
-                $param['text'] = 'Вы участвуете!';
+            } else {
+
+
+                $param['text'] = 'Доступно только для подписчиков группы';
+
             }
 
         } else {
-
-
-            $param['text'] = 'Доступно только для подписчиков группы';
-
+            $param['text'] = 'Завершен!';
         }
 
 
-
-        try
-        {
             Telegram::answerCallbackQuery($param);
-        }
-        catch (\Exception $e)
-        {
+
+
+
+        if(isset($draw)) {
+
+            self::editDrawPublicMessage($draw);
 
         }
-
-
-        self::editDrawPublicMessage($draw);
 
 
 

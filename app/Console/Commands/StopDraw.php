@@ -90,7 +90,7 @@ class StopDraw extends Command
 
                         $user_name = (isset($member->user_name)) ? $member->user_name : $member->first_name;
 
-                        $victory_send .= $user_name . PHP_EOL;
+                        $victory_send .= '<a href="tg://user?id='.$member->user_id.'">'.$user_name.'</a>'. PHP_EOL;
 
                             unset($user_name);
                     }

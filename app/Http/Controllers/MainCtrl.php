@@ -1209,6 +1209,8 @@ class MainCtrl extends Controller
         // Написали что то в чате групп
         if( $updates->message && $message['chat']['type'] != 'private' && isset($message['text']) ) {
 
+
+            // Назначаем админа группы
             if(isset($message['text']) && $message['text'] == '/voterPro') {
 
 
@@ -1509,9 +1511,36 @@ class MainCtrl extends Controller
             'chat_id' => '-1001222902126',
         );
 
-        $resMember = Telegram::getChatAdministrators($arMember);
+        //$resMember = Telegram::getChatAdministrators($arMember);
+
+
+
+        //1604951343
+
+        /*
+
+
+        $arMember = array(
+            'chat_id' => '-1001311691334',
+            'user_id' => '1604951343'
+        );
+
+        $resMember = Telegram::getChatMember($arMember);
+
+
 
         dd($resMember);
+
+        */
+
+
+        $arr = array(
+            'chat_id' => '107685462',
+            'text' => 'ссылка <a href="tg://user?id=1604951343">shvep</a>',
+            'parse_mode' => 'HTML'
+        );
+
+        Telegram::sendMessage($arr);
 
 
 

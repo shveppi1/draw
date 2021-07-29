@@ -16,7 +16,12 @@ Route::get('/', function () {
 });
 
 
-Route::any('/drawPool/webhook/', 'MainCtrl@update');
+//Route::any('/drawPool/webhook/', 'MainCtrl@update');
+
+Route::group(['middleware' => 'throttle:400'], function () {
+    Route::any('/drawPool/webhook/', 'MainCtrl@update');
+});
+
 
 /*
 Route::get('/getRespons', 'MainCtrl@respons');
