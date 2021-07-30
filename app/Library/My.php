@@ -279,7 +279,7 @@ class My
 
                     } else {
 
-                        $textSend = 'Напиши количество приглашенных (цифра)';
+                        $textSend = 'Напиши количество приглашенных (цифра)'.PHP_EOL. 'В канал приглашать нельзя, работает только для групп!';
 
                         $new_state['state'] = 'editedDrawPart';
                     }
@@ -955,9 +955,9 @@ class My
         }
         catch (Telegram\Bot\Exceptions\TelegramResponseException $err) {
 
-            $logTxt = print_r($err, true);
+            /*$logTxt = print_r($err, true);
 
-            Log::channel('test')->info($logTxt);
+            Log::channel('test')->info($logTxt);*/
 
         }
 
