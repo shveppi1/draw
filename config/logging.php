@@ -112,6 +112,13 @@ return [
             'path' => storage_path('logs/drawstop.log'),
             'level' => 'info',
         ],
+
+        'error_try' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/error_tg/error_try.log'),
+            'level' => 'info',
+        ],
+
     ],
 
 ];

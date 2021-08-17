@@ -157,6 +157,8 @@ class MainCtrl extends Controller
                     case '(editMyDrawComplited)':
 
 
+                        // Показ завершенного розыгрыша для изменения или удаления
+
                         $message = $callback['message'];
                         $user_id = $message['chat']['id'];
 
@@ -235,7 +237,7 @@ class MainCtrl extends Controller
 
                         $temp_text = '';
                         $temp_text .= 'Текст розыгрыша: ' . $draw->text . PHP_EOL;
-                        $temp_text .= 'Время окончания: ' . $draw->date_finish . PHP_EOL;
+                        $temp_text .= 'Время завершения: ' . $draw->date_finish . PHP_EOL;
                         $temp_text .= 'Группа: ' . $draw->chat_title . PHP_EOL;
                         $temp_text .= 'Победители: ' . $victory_send . PHP_EOL;
 
@@ -454,8 +456,15 @@ class MainCtrl extends Controller
 
                     Telegram::sendMessage([
                         'chat_id' => $message['chat']['id'],
-                        'text' => 'Устраивайте розыгрыши призов (телефон, скидочный купон и т.д) на своем канале за подписку, и приглашение участников в группу.' . PHP_EOL . 'Я помогу Вам развить канал'. PHP_EOL,
-                        'reply_markup' => $reply_markup
+                        'text' => 'Устраивайте розыгрыши призов (телефон, скидочный купон и т.д) на своем канале за подписку, и приглашение участников в группу.' . PHP_EOL .
+                            'Я помогу Вам развить канал'. PHP_EOL . PHP_EOL .
+                            'Группа бота https://t.me/voterpro'. PHP_EOL .
+                            'Сайт бота https://voterpro.ru/'. PHP_EOL .
+                            'Помощь: @shveppi',
+                        'reply_markup' => $reply_markup,
+                        'parse_mode' => 'HTML',
+                        'disable_web_page_preview' => 1
+
                     ]);
 
 
@@ -493,63 +502,75 @@ class MainCtrl extends Controller
                 case 'createdDraw': // Сохранение draw
 
 
-                    /*  SAVE DRAW  */
-
-                    $double = Shvp::doubleDraw($text, $user_id, $prev_message['date'],$message['date']);
+                    if(strlen($text) > 900){
 
 
-                    if(!$double) {
+                        $keyboard = [
+                            ['Назад, в главное меню'],
+                        ];
 
-                        $draw = Draw::create([
-                            'text' => $text,
-                            'admin_id' => $user_id,
-                            'date_finish' => Carbon::now()->addHour(),
+                        $reply_markup = new Keyboard(['keyboard' => $keyboard, 'resize_keyboard' => true, 'one_time_keyboard' => true]);
+
+                        Telegram::sendMessage([
+                            'chat_id' => $message['chat']['id'],
+                            'text' => 'Слишком длинный текст розыгрыша.'.PHP_EOL.'Пришли мне текст для розыгрыша',
+                            'reply_markup' => $reply_markup
                         ]);
 
-                    }
 
+                        $new_state['state'] = 'createDraw';
 
-                    if(isset($draw)) {
-                        $new_state['draw_id'] = $draw->id;
                     } else {
-                        if(isset($prev_draw_id)) {
-                            $new_state['draw_id'] = $prev_draw_id;
-                        } else {
-                            $new_state['draw_id'] = '';
+
+                        /*  SAVE DRAW  */
+
+                        $double = Shvp::doubleDraw($text, $user_id, $prev_message['date'], $message['date']);
+
+
+                        if (!$double) {
+
+                            $draw = Draw::create([
+                                'text' => $text,
+                                'admin_id' => $user_id,
+                                'date_finish' => Carbon::now()->addHour(),
+                            ]);
+
                         }
+
+
+                        if (isset($draw)) {
+                            $new_state['draw_id'] = $draw->id;
+                        } else {
+                            if (isset($prev_draw_id)) {
+                                $new_state['draw_id'] = $prev_draw_id;
+                            } else {
+                                $new_state['draw_id'] = '';
+                            }
+                        }
+
+                        $draw = Draw::where('id', $new_state['draw_id'])->first();
+
+
+                        $arSendK = Shvp::firstArSendDraw();
+
+                        $arr = array_merge($arSendK, ['chat_id' => $message['chat']['id'], 'text' => $text,]);
+
+                        Telegram::sendMessage($arr);
+
+
+                        $arDrawSend = Shvp::getArDrawSend($draw);
+                        $arMerg = array_merge($arDrawSend, ['chat_id' => $message['chat']['id']]);
+
+
+                        $draw_edit_m = Telegram::sendMessage($arMerg);
+
+
+                        Draw::where('id', $new_state['draw_id'])->update(['edit_message_id' => $draw_edit_m['message_id']]);
+
+
+                        $new_state['state'] = 'editDraw';
+
                     }
-
-                    $draw = Draw::where('id', $new_state['draw_id'])->first();
-
-
-
-
-                    $arSendK = Shvp::firstArSendDraw();
-
-                    $arr = array_merge($arSendK,['chat_id' => $message['chat']['id'], 'text' => $text,]);
-
-                    Telegram::sendMessage($arr);
-
-
-
-
-                    $arDrawSend = Shvp::getArDrawSend($draw);
-                    $arMerg = array_merge( $arDrawSend, ['chat_id' => $message['chat']['id']] );
-
-
-                    $draw_edit_m = Telegram::sendMessage($arMerg);
-
-
-                    Draw::where('id', $new_state['draw_id'])->update(['edit_message_id' => $draw_edit_m['message_id']]);
-
-
-
-
-
-
-                    $new_state['state'] = 'editDraw';
-
-
 
                     break;
 
@@ -627,7 +648,7 @@ class MainCtrl extends Controller
                     if($text != 'Назад, к розыгрышу'){
                         $count = (int)$text;
                         if(strlen($count) > 0){
-                            $draw->count_part = $text;
+                            $draw->count_part = $count;
                             $draw->save();
                         }
                         $text = $draw->text;
@@ -664,7 +685,7 @@ class MainCtrl extends Controller
                         $arrSend,
                         [
                             'chat_id' => $message['chat']['id'],
-                            'text' => 'Пришли мне дату окончания розыгрыша' . PHP_EOL . 'в формате: '. Carbon::now()->addHour()->format('Y-m-d H:i') . ' по мск'
+                            'text' => 'Пришли мне дату завершения розыгрыша' . PHP_EOL . 'в формате: '. Carbon::now()->addHour()->format('Y-m-d H:i') . ' по мск'
                         ]
                     );
 
@@ -761,7 +782,7 @@ class MainCtrl extends Controller
                             $reply_markup = $keyboard;
 
 
-                            $temp_text = 'Выбраны <b>СПЕЦ условия</b> для розыгрыша, публикация такого розыгрыша платная,'.PHP_EOL.'пройдите по ссылке и получите код публикации стоимость 1100 рублей'.PHP_EOL.PHP_EOL.'Опубликовать бесплатно если поставить количество приглашенных 0.';
+                            $temp_text = 'Выбраны <b>СПЕЦ условия</b> для розыгрыша, публикация такого розыгрыша платная,'.PHP_EOL.'пройдите по ссылке и получите код публикации стоимость 400 рублей'.PHP_EOL.PHP_EOL.'Опубликовать бесплатно если поставить количество приглашенных 0.';
 
 
                             Telegram::sendMessage([
@@ -797,19 +818,54 @@ class MainCtrl extends Controller
                             // если еще не опубликован
                             if(!$draw->published_at) {
 
-                                $new_mes = Shvp::publicDraw($draw);
+                                try {
+                                    $new_mes = Shvp::publicDraw($draw);
+                                }
+                                catch (Telegram\Bot\Exceptions\TelegramResponseException $err) {
+
+                                    $err_desc = $err->getResponseData();
+
+                                    if (strpos($err_desc['description'], 'need administrator rights') === true) {
+
+                                        $arrSend = Shvp::getArEditFieldDraw();
+
+                                        $arMerg = array_merge(
+                                            $arrSend,
+                                            [
+                                                'chat_id' => $message['chat']['id'],
+                                                'text' => 'В данном чате запрещено размещать без администраторских прав.'.PHP_EOL.
+                                                    'Сделайте меня админитратором'
+                                            ]
+                                        );
+
+                                        Telegram::sendMessage($arMerg);
+
+                                        $not_public = true;
+
+                                        $new_state['state'] = 'editDraw';
+                                        $new_state['draw_id'] = $prev_draw_id;
+
+                                    }
+
+                                }
 
 
-                                $draw->published_at = Carbon::now();
+                                if(!isset($not_public)){
 
-                                $draw->status = 'Опубликован';
+                                    $draw->published_at = Carbon::now();
 
-                                $draw->message_id = $new_mes['message_id'];
+                                    $draw->status = 'Опубликован';
 
-                                $message_new_id = Shvp::backDraw($draw, $message['chat']['id'], $draw->text);
+                                    $draw->message_id = $new_mes['message_id'];
 
-                                $draw->edit_message_id = $message_new_id['message_id'];
-                                $draw->save();
+                                    $message_new_id = Shvp::backDraw($draw, $message['chat']['id'], $draw->text);
+
+                                    $draw->edit_message_id = $message_new_id['message_id'];
+                                    $draw->save();
+
+                                }
+
+
 
                             } else { // Если уже был опубликован
 
@@ -890,20 +946,54 @@ class MainCtrl extends Controller
 
                         $draw = Draw::where('id', $prev_draw_id)->first();
 
-                        $new_mes = Shvp::publicDraw($draw);
+
+                        try {
+                            $new_mes = Shvp::publicDraw($draw);
+                        }
+                        catch (Telegram\Bot\Exceptions\TelegramResponseException $err) {
+
+                            $err_desc = $err->getResponseData();
+
+                            if (strpos($err_desc['description'], 'need administrator rights') === true) {
+
+                                $arrSend = Shvp::getArEditFieldDraw();
+
+                                $arMerg = array_merge(
+                                    $arrSend,
+                                    [
+                                        'chat_id' => $message['chat']['id'],
+                                        'text' => 'В данном чате запрещено размещать без администраторских прав.'.PHP_EOL.
+                                            'Сделайте меня админитратором'
+                                    ]
+                                );
+
+                                Telegram::sendMessage($arMerg);
+
+                                $not_public = true;
 
 
-                        $draw->published_at = Carbon::now();
-                        $draw->pay_key = $paykey->key;
+                            }
 
-                        $draw->status = 'Опубликован';
+                        }
 
-                        $draw->message_id = $new_mes['message_id'];
+                        if(!isset($not_public)){
 
-                        $message_new_id = Shvp::backDraw($draw, $message['chat']['id'], $draw->text);
+                            $draw->published_at = Carbon::now();
+                            $draw->pay_key = $paykey->key;
 
-                        $draw->edit_message_id = $message_new_id['message_id'];
-                        $draw->save();
+                            $draw->status = 'Опубликован';
+
+                            $draw->message_id = $new_mes['message_id'];
+
+                            $message_new_id = Shvp::backDraw($draw, $message['chat']['id'], $draw->text);
+
+                            $draw->edit_message_id = $message_new_id['message_id'];
+                            $draw->save();
+
+
+                        }
+
+
 
                         $new_state['state'] = 'editDraw';
                         $new_state['draw_id'] = $prev_draw_id;
@@ -1276,17 +1366,21 @@ class MainCtrl extends Controller
 
                 case 'backToDraw':
 
-                    $draw = Draw::where('id', $prev_draw_id)->first();
+                    if(isset($prev_draw_id)) {
 
-                    $text_send = $draw->text;
+                        $draw = Draw::where('id', $prev_draw_id)->first();
 
-                    $message_new_id = Shvp::backDraw($draw, $message['chat']['id'], $text_send);
+                        $text_send = $draw->text;
 
-                    $draw->edit_message_id = $message_new_id['message_id'];
-                    $draw->save();
+                        $message_new_id = Shvp::backDraw($draw, $message['chat']['id'], $text_send);
 
-                    $new_state['state'] = 'editDraw';
-                    $new_state['draw_id'] = $prev_draw_id;
+                        $draw->edit_message_id = $message_new_id['message_id'];
+                        $draw->save();
+
+                        $new_state['state'] = 'editDraw';
+                        $new_state['draw_id'] = $prev_draw_id;
+
+                    }
 
 
 
@@ -1299,9 +1393,13 @@ class MainCtrl extends Controller
                     $text_send = '<b>Я помогу развить канал активностью.</b>' . PHP_EOL .
                         'Устраивайте розыгрыши призов (телефон, скидочный купон и т.д) на своем канале'. PHP_EOL . PHP_EOL .
                         'Вы можете включить <b>СПЕЦ условия</b> для участия в розыгрыше.' . PHP_EOL . PHP_EOL .
-                        'Например, человек не сможет участвовать пока не добавит в вашу группу 10 (или 50, как вы настроите) своих друзей, знакомых, одноклассников.'. PHP_EOL . PHP_EOL .
-                        'Я сам определяю и считаю добавленных участников в вашу группу и допускаю к участию.'.PHP_EOL.'Сайт бота https://voterpro.ru/'. PHP_EOL .
-                        'Тех. поддержка: @shveeps';
+                        'Например, человек не сможет участвовать пока не добавит в вашу группу 10 (или 50, как вы настроите) своих друзей, знакомых, одноклассников.'. PHP_EOL .
+                        'Я сам определяю и считаю добавленных участников в вашу группу и допускаю к участию.'.PHP_EOL.PHP_EOL.
+                        'Ограничение по приглашенным работает только для групп, в группе есть кнопка добавить участника.'.PHP_EOL.
+                        'В каналах, участие в розыгрыше без ограничений и условий' . PHP_EOL . PHP_EOL .
+                        'Группа бота https://t.me/voterpro'. PHP_EOL .
+                        'Сайт бота https://voterpro.ru/'. PHP_EOL .
+                        'Помощь: @shveppi';
 
 
                     $keyboard = $this->keyboardHello;
@@ -1312,7 +1410,8 @@ class MainCtrl extends Controller
                         'chat_id' => $message['chat']['id'],
                         'text' => $text_send,
                         'parse_mode' => 'HTML',
-                        'reply_markup' => $reply_markup
+                        'reply_markup' => $reply_markup,
+                        'disable_web_page_preview' => 1
                     ]);
 
 
@@ -1369,7 +1468,9 @@ class MainCtrl extends Controller
                 }
 
 
-                Shvp::saveState($message['from']['id'], $new_state);
+                if(isset($new_state)) {
+                    Shvp::saveState($message['from']['id'], $new_state);
+                }
 
             }
 
@@ -1707,6 +1808,7 @@ class MainCtrl extends Controller
 
         */
 
+        /*
 
         $arr = array(
             'chat_id' => '107685462',
@@ -1715,14 +1817,90 @@ class MainCtrl extends Controller
         );
 
         Telegram::sendMessage($arr);
+*/
+
+
+        /*
+
+        $draw = Draw::where('id', 62)->first();
+
+
+        $victory_send = '<a href="tg://user?id=958207241">@Zanel2</a>'. PHP_EOL;
+
+        $text_send = '<b>'.$draw->text.'</b>'.PHP_EOL;
+        $text_send .= 'Завершен! Поздравляем победителей.:'.PHP_EOL;
+        $text_send .= $victory_send;
+
+
+        $arrSend = array(
+            'chat_id' => $draw->chat_id,
+            'text' => $text_send,
+            'message_id' => 513,
+            'parse_mode' => 'HTML',
+        );
+
+
+        $edit_succes = 'пусто';
+
+        $edit_succes = Telegram::editMessageText($arrSend);
+
+        $logTxt = print_r($edit_succes, true);
+
+        Log::channel('drawstop')->info($logTxt);
+
+        */
 
 
 
+        //513
+
+
+        /*
+        $aRdraws = Draw::where('status','=', 'Не опубликован2')->
+            orWhere(function ($query) {
+                $query->where('public', 0);
+            })
+            ->get();
+        */
+
+/*
+        $aRdraws = Draw::where('date_finish', '<', date('Y-m-d H:i:s'))
+            ->where('published_at', '<>', '')
+            ->where('status', 'Опубликован')
+            ->orWhere(function ($query) {
+                $query->where( 'date_finish', '<', date('Y-m-d H:i:s') )
+                    ->where( 'published_at', '<>', '' )
+                    ->where( 'public', 0 );
+            })
+            ->get();
 
 
 
-        echo date('Y-m-d H:i:s');
+        foreach($aRdraws as $draw){
+            echo $draw->id  . ' - ' . $draw->status . ' - ' . $draw->text . '<br/><br/>';
+        }
+
+
+        dd($aRdraws);
+*/
+        //echo date('Y-m-d H:i:s');
         //$draw->
+
+
+        $arr = array(
+            'chat_id' => '107685462',
+            'latitude' => '52.572926',
+            'longitude' => '39.484828',
+        );
+
+
+        Telegram::sendLocation($arr);
+
+
+        $text = '5-10';
+        $count = (int)$text;
+
+        dd($count);
 
 
        return dd([]);

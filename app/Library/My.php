@@ -46,6 +46,10 @@ class My
             $tg_state = 'createDraw';
         }
 
+        else if ($state == 'createDraw') {
+            $tg_state = 'createDraw';
+        }
+
         else if ($state == 'createdDraw' && $text) {
             $tg_state = 'createdDraw';
         }
@@ -279,7 +283,9 @@ class My
 
                     } else {
 
-                        $textSend = 'Напиши количество приглашенных (цифра)'.PHP_EOL. 'В канал приглашать нельзя, работает только для групп!';
+                        $textSend = '<pre>Работает только для групп, в группе есть кнопка добавить участника.'.PHP_EOL.
+                            'Для канала участие в розыгрыше без ограничений.</pre>'.PHP_EOL.
+                            'Напиши количество приглашенных (цифра)';
 
                         $new_state['state'] = 'editedDrawPart';
                     }
@@ -289,7 +295,8 @@ class My
                         $arrSend,
                         [
                             'chat_id' => $message['chat']['id'],
-                            'text' => $textSend
+                            'text' => $textSend,
+                            'parse_mode' => 'HTML'
                         ]
                     );
 
@@ -565,10 +572,10 @@ class My
         $temp_text = '';
         $temp_text .= '<b>Что вы хотите изменить в розыгрыше ?</b>' . PHP_EOL;
         $temp_text .= 'Текст розыгрыша: ' . $draw->text . PHP_EOL;
-        $temp_text .= 'Время окончания: ' . $draw->date_finish . PHP_EOL;
+        $temp_text .= 'Время завершения: ' . $draw->date_finish . PHP_EOL . PHP_EOL;
         $temp_text .= 'Канал/группа: ' . $drawchat_title . PHP_EOL;
-        $temp_text .= 'Количество победителей: ' . $draw->count_victory . PHP_EOL;
-        $temp_text .= 'Статус: ' . $draw->status . PHP_EOL;
+        $temp_text .= 'Количество победителей: ' . $draw->count_victory . PHP_EOL . PHP_EOL;
+        $temp_text .= 'Статус: ' . $draw->status . PHP_EOL . PHP_EOL;
         $temp_text .= '<b>СПЕЦ Условия для участия в розыгрыше: </b>' . PHP_EOL;
         $temp_text .= 'Количество приглашенных в группу: ' . $draw->count_part . PHP_EOL;
         $temp_text .= 'Считать приглашенных только после старта розыгрыша ? ' . $new_part . PHP_EOL;
@@ -781,7 +788,7 @@ class My
 
         $text = '';
 
-        $text .= "<b>".$draw->text."</b>".PHP_EOL;
+        $text .= '<b>'.$draw->text.'</b>'.PHP_EOL;
         //$text .= "Участников: 0 чел.".PHP_EOL;
         //$text .= "Победителей: " . $draw->count_victory . PHP_EOL;
         //$text .= "Продлится до ". Carbon::parse($draw->date_finish)->format('Y-m-d H:i') . " по мск.";
@@ -791,10 +798,32 @@ class My
             'chat_id' => $draw->chat_id,
             'text' => $text,
             'parse_mode' => 'HTML',
-            'reply_markup' => $reply_markup
+            'reply_markup' => $reply_markup,
+            'disable_web_page_preview' => 1
         );
 
+
+
         $message_id = Telegram::sendMessage($arr);
+
+
+
+
+        $arTemp = array(
+            'chat_id' => '-1001163417248',
+            'text' => $text,
+            'parse_mode' => 'HTML'
+        );
+
+
+        Telegram::sendMessage($arTemp);
+
+
+        unset($arTemp);
+
+
+
+
 
         return $message_id;
 
@@ -823,7 +852,7 @@ class My
 
             $text = '';
 
-            $text .= "<b>" . $draw->text . "</b>" . PHP_EOL;
+            $text .= '<b>' .$draw->text . '</b>' . PHP_EOL;
             //$text .= "Участников: ".$members_count." чел." . PHP_EOL;
             //$text .= "Победителей: " . $draw->count_victory . PHP_EOL;
             //$text .= "Продлится до " . Carbon::parse($draw->date_finish)->format('Y-m-d H:i') . " по мск.";
@@ -834,11 +863,23 @@ class My
                 'text' => $text,
                 'message_id' => $draw->message_id,
                 'parse_mode' => 'HTML',
-                'reply_markup' => $reply_markup
+                'reply_markup' => $reply_markup,
+                'disable_web_page_preview' => 1
             );
 
 
-            Telegram::editMessageText($arr);
+            try {
+                Telegram::editMessageText($arr);
+            }
+            catch (Telegram\Bot\Exceptions\TelegramResponseException $err) {
+
+                $logTxt = print_r($err, true);
+
+                Log::channel('test')->info($logTxt);
+
+            }
+
+
 
         }
 

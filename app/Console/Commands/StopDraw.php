@@ -10,6 +10,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Telegram;
+use Telegram\Bot\Keyboard\Keyboard;
 
 class StopDraw extends Command
 {
@@ -48,8 +49,22 @@ class StopDraw extends Command
         Paykey::where('created_at','<', Carbon::now()->subDays(20))->delete();
 
 
+        /*
+        $aRdraws = Draw::where('date_finish', '<', date('Y-m-d H:i:s'))
+            ->where('published_at', '<>', '')
+            ->where('status', 'Опубликован')
+            ->get();
+        */
 
-        $aRdraws = Draw::where('date_finish', '<', date('Y-m-d H:i:s'))->where('published_at', '<>', '')->where('status', 'Опубликован')->get();
+        $aRdraws = Draw::where('date_finish', '<', date('Y-m-d H:i:s'))
+            ->where('published_at', '<>', '')
+            ->where('status', 'Опубликован')
+            ->orWhere(function ($query) {
+                $query->where( 'date_finish', '<', date('Y-m-d H:i:s') )
+                    ->where( 'published_at', '<>', '' )
+                    ->where( 'public', 0 );
+            })
+            ->get();
 
 
         $log_arr = array();
@@ -120,30 +135,120 @@ class StopDraw extends Command
                 );
 
 
-                $edit_succes = Telegram::editMessageText($arrSend);
 
-                $arrSendAdmin = array(
-                    'chat_id' => $draw->admin_id,
-                    'text' => $text_send,
-                    'parse_mode' => 'HTML',
-                );
+                try {
+                    $public = Telegram::editMessageText($arrSend);
+                }
+                catch (Telegram\Bot\Exceptions\TelegramResponseException $err) {
 
-
-                Telegram::sendMessage($arrSendAdmin);
+                    $err_desc = $err->getResponseData();
 
 
 
-                if($edit_succes) {
 
-                    $draw->status = 'Завершен';
+                    if (strpos($err_desc['description'], 'MESSAGE_ID_INVALID') !== true) {
 
-                    $draw->save();
+
+                        $draw->public = 1;
+
+
+                        $notPublicMessage = true; // нет сообщения в группе
+                    }
+
 
                 }
 
 
+
+
+
+                if(isset($public)){
+
+                    $draw->public = 1;
+
+                }
+
+
+
+                if($draw->status != 'Завершен') {
+
+                    $replace_id = str_replace('-100', '', $draw->chat_id);
+
+                    $url_message = 'https://t.me/c/' . $replace_id . '/' .$draw->message_id;
+
+                    $keyboard = Keyboard::make()
+                        ->inline()
+                        ->row(
+                            Keyboard::inlineButton(
+                                [
+                                    'text' => 'Перейти к сообщению',
+                                    'url' => $url_message,
+                                ]
+                            )
+
+                        );
+
+
+                    $reply_markup = $keyboard;
+
+
+                    $text_adm = 'Ваш розыгрыш:'.PHP_EOL;
+                    $text_adm .= $text_send;
+
+                    $arrSendAdmin = array(
+                        'chat_id' => $draw->admin_id,
+                        'text' => $text_adm,
+                        'parse_mode' => 'HTML',
+                        'reply_markup' => $reply_markup
+                    );
+
+
+
+
+
+
+                    try {
+                        $adm_pub = Telegram::sendMessage($arrSendAdmin);
+                    }
+                    catch (Telegram\Bot\Exceptions\TelegramResponseException $err) {
+
+                        $err_desc = $err->getResponseData();
+
+
+
+
+                        if (strpos($err_desc['description'], 'bot was blocked by the user') !== true) {
+
+
+
+                        }else {
+
+                            $logTxt = print_r($err->getResponse(), true);
+
+                            Log::channel('error_try')->info($logTxt);
+
+                        }
+
+
+                    }
+
+                }
+
+
+
+
+
+                $draw->status = 'Завершен';
+
+                $draw->save();
+
+
+
+
                 $log_arr[$draw->id]['draw_id'] = $draw->id;
                 $log_arr[$draw->id]['victory'] = $victory_send;
+
+
 
 
             }
